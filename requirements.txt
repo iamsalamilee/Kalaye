@@ -1,0 +1,5 @@
+webrtcvad
+numpy
+scipy
+pysrt
+ffmpeg-python

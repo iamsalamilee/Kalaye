@@ -1,0 +1,37 @@
+# Project workbook (personal reference)
+GHOST_SYNC_WORKBOOK.md
+
+# Virtual environment
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Temp audio files
+*.wav
+*.opus
+
+# Test data (videos are too large for git)
+test_data/
+test_files/
+
+# Video/media files (never commit these)
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.mp3
+*.flac
+
+# Environment variables
+.env
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
