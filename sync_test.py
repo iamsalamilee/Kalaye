@@ -49,17 +49,12 @@ PASS_THRESHOLD_SEC = 0.5     # Maximum acceptable offset error
 # STEP 1 — Extract audio from video file
 # =============================================================================
 
-def extract_audio(video_path, output_path=None):
+def extract_audio(video_path):
     """
     Extract audio from a video file using ffmpeg.
-    Outputs: 16kHz, mono, 16-bit PCM WAV (required by webrtcvad).
+    Pipes PCM directly to memory — no temp files, no disk I/O.
+    Returns: raw PCM bytes (16kHz, mono, 16-bit signed little-endian)
     """
-    if output_path is None:
-        output_path = os.path.join(
-            tempfile.gettempdir(),
-            f"ghost_sync_audio_{os.getpid()}.wav"
-        )
-
     print(f"[Step 1] Extracting audio from: {os.path.basename(video_path)}")
 
     cmd = [
@@ -69,13 +64,13 @@ def extract_audio(video_path, output_path=None):
         "-acodec", "pcm_s16le", # 16-bit PCM
         "-ac", "1",             # mono
         "-ar", str(SAMPLE_RATE),# 16kHz
-        output_path,
-        "-y",                   # overwrite if exists
+        "-f", "s16le",          # raw PCM (no WAV header)
+        "pipe:1",               # pipe to stdout
         "-loglevel", "quiet"
     ]
 
     try:
-        subprocess.run(cmd, check=True)
+        result = subprocess.run(cmd, capture_output=True, check=True)
     except FileNotFoundError:
         print("\n[ERROR] ffmpeg not found!")
         print("Install ffmpeg: https://ffmpeg.org/download.html")
@@ -85,27 +80,18 @@ def extract_audio(video_path, output_path=None):
         print(f"\n[ERROR] ffmpeg failed: {e}")
         sys.exit(1)
 
-    file_size = os.path.getsize(output_path)
-    duration_sec = file_size / (SAMPLE_RATE * 2)  # 2 bytes per sample
-    print(f"         Audio extracted: {duration_sec:.1f} seconds ({file_size / 1024 / 1024:.1f} MB)")
+    audio_bytes = result.stdout
+    pcm_size_mb = len(audio_bytes) / (1024 * 1024)
+    duration_sec = len(audio_bytes) / (SAMPLE_RATE * 2)  # 2 bytes per sample
 
-    return output_path
+    # What it WOULD be as Opus (16kbps) — for comparison
+    opus_estimated_kb = (duration_sec * 16000 / 8) / 1024  # 16kbps in KB
 
+    print(f"         Duration: {duration_sec:.1f} seconds")
+    print(f"         PCM in memory: {pcm_size_mb:.1f} MB (no file written to disk!)")
+    print(f"         Opus equivalent: ~{opus_estimated_kb:.0f} KB (for server upload)")
 
-def load_audio_bytes(wav_path):
-    """Load raw PCM bytes from a WAV file (skip the header)."""
-    with open(wav_path, "rb") as f:
-        raw = f.read()
-
-    # Find the 'data' chunk for robustness
-    data_pos = raw.find(b"data")
-    if data_pos == -1:
-        # Fallback: skip standard 44-byte header
-        return raw[44:]
-
-    # 4 bytes after 'data' marker is the chunk size, then the actual data
-    data_start = data_pos + 8
-    return raw[data_start:]
+    return audio_bytes
 
 
 # =============================================================================
@@ -314,9 +300,8 @@ def run_sync_test(video_path, srt_path, shift_seconds=0.0):
 
     start_time = time.time()
 
-    # Step 1 — Extract audio
-    wav_path = extract_audio(video_path)
-    audio_bytes = load_audio_bytes(wav_path)
+    # Step 1 — Extract audio (piped to memory, no temp file)
+    audio_bytes = extract_audio(video_path)
 
     # Step 2 — VAD
     vad_signal = audio_to_vad_signal(audio_bytes)
@@ -335,12 +320,6 @@ def run_sync_test(video_path, srt_path, shift_seconds=0.0):
 
     # Step 5 — FFT cross-correlation
     offset_seconds, confidence = find_sync_offset(vad_smooth, srt_smooth)
-
-    # Clean up temp audio file
-    try:
-        os.remove(wav_path)
-    except OSError:
-        pass
 
     elapsed = time.time() - start_time
 

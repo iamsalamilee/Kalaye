@@ -1,0 +1,8 @@
+# Ghost Sync Server — Dependencies
+fastapi
+uvicorn[standard]
+python-multipart
+webrtcvad
+numpy
+scipy
+pysrt

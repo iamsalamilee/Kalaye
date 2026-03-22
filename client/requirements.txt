@@ -1,0 +1,5 @@
+# Ghost Sync Client — Dependencies
+PyQt5
+psutil
+requests
+pysrt
