@@ -69,3 +69,25 @@ class GhostSyncClient:
         if resp.status_code == 200:
             return resp.json()
         return None
+
+    def pipeline(self, filename, language=None, filepath=None):
+        """
+        Full pipeline: check cache → Whisper transcribe → return SRT.
+        Pass filepath so server can transcribe the audio.
+        """
+        data = {"filename": filename, "language": language}
+        if filepath:
+            data["filepath"] = filepath
+
+        resp = requests.post(
+            f"{self.server_url}/pipeline",
+            data=data,
+            timeout=900,  # Whisper transcription can take ~10 min on CPU
+        )
+        if resp.status_code == 200:
+            return resp.json()
+        elif resp.status_code == 404:
+            return None
+        else:
+            raise Exception(f"Pipeline failed: {resp.status_code} — {resp.text}")
+

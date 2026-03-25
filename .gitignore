@@ -28,6 +28,15 @@ test_files/
 # Environment variables
 .env
 
+# Database files
+*.db
+
+# Whisper model cache
+models/
+
+# Generated subtitle files
+ghost_sync_subtitle.srt
+
 # OS files
 Thumbs.db
 .DS_Store

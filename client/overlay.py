@@ -43,12 +43,12 @@ class SubtitleOverlay(QWidget):
 
         # Subtitle state
         self.current_text = ""
-        self.font_size = 28
+        self.font_size = 20
         self.font_family = "Segoe UI"
         self.text_color = QColor(255, 255, 255)       # white
         self.outline_color = QColor(0, 0, 0)           # black outline
         self.outline_width = 3
-        self.bg_opacity = 100  # 0-255, semi-transparent background
+        self.bg_opacity = 60  # 0-255, semi-transparent background
 
         # Dragging state
         self._drag_pos = None

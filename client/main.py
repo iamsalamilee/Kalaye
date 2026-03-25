@@ -69,16 +69,15 @@ def run_srt_mode(app, overlay, srt_path, offset_ms=0):
     return app.exec_()
 
 
-def run_auto_mode(app, overlay):
+def run_auto_mode(app, overlay, video_file_override=None):
     """
     Full auto mode:
-    1. Detect running video player
+    1. Detect running video player (or use provided file)
     2. Get the video file path
-    3. Send filename to server for identification
-    4. Get subtitles
-    5. Sync and display
+    3. Call /pipeline → identify movie → fetch subtitles from OpenSubtitles
+    4. Display subtitles on overlay
     """
-    print("[Ghost Sync] Auto mode — looking for video players...")
+    print("[Ghost Sync] Auto mode — starting pipeline...")
 
     client = GhostSyncClient()
 
@@ -88,35 +87,57 @@ def run_auto_mode(app, overlay):
         print("        Start the server first: uvicorn server.main:app --reload")
         return 1
 
-    # Detect video players
-    players = get_running_players()
-    if not players:
-        print("[INFO] No video players detected.")
-        print("       Open a movie in VLC, mpv, or another player, then try again.")
-        return 1
-
-    # Use first detected player
-    player_info = players[0]
-    print(f"[INFO] Found: {player_info['name']} (PID: {player_info['pid']})")
-
-    # Try to get the video file path
-    video_file = get_player_video_file(player_info["pid"])
-    if video_file:
-        print(f"[INFO] Playing: {os.path.basename(video_file)}")
-
-        # Identify the movie
+    # Get video filename
+    if video_file_override:
+        video_file = video_file_override
         filename = os.path.basename(video_file)
-        movie_info = client.identify(filename)
-        if movie_info:
-            print(f"[INFO] Identified: {movie_info['title']} ({movie_info.get('year', '?')})")
-        else:
-            print(f"[INFO] Could not identify movie from filename.")
+        print(f"[INFO] Using file: {filename}")
     else:
-        print("[INFO] Could not determine which file is playing.")
-        print("       You can use manual mode: python -m client.main --srt your_subtitle.srt")
+        # Detect video players
+        players = get_running_players()
+        if not players:
+            print("[INFO] No video players detected.")
+            print("       Open a movie in VLC/mpv, or use: python -m client.main --file movie.mp4")
+            return 1
+
+        player_info = players[0]
+        print(f"[INFO] Found: {player_info['name']} (PID: {player_info['pid']})")
+
+        video_file = get_player_video_file(player_info["pid"])
+        if not video_file:
+            print("[INFO] Could not determine which file is playing.")
+            print("       Use: python -m client.main --file movie.mp4")
+            return 1
+
+        filename = os.path.basename(video_file)
+        print(f"[INFO] Playing: {filename}")
+
+    # Call the pipeline: identify → fetch subtitles (hash first, then title)
+    print(f"[INFO] Searching for subtitles...")
+    result = client.pipeline(filename, filepath=video_file)
+
+    if result is None:
+        print(f"[ERROR] No subtitles found for '{filename}'")
+        print("        Try manual mode: python -m client.main --srt your_subtitle.srt")
         return 1
 
-    print("[INFO] Auto mode pipeline is ready. Subtitle fetching coming soon!")
+    print(f"[INFO] Got subtitles for: {result['movie_title']} ({result.get('movie_year', '?')})")
+    print(f"[INFO] Source: {result['source']}")
+
+    # Save SRT content to a temp file for the subtitle player
+    import tempfile
+    srt_path = os.path.join(tempfile.gettempdir(), "ghost_sync_subtitle.srt")
+    with open(srt_path, "w", encoding="utf-8") as f:
+        f.write(result["srt_content"])
+
+    print(f"[INFO] Subtitles loaded! Displaying on overlay...")
+    print(f"       Press Ctrl+C to quit.")
+
+    # Play subtitles on overlay
+    player = SubtitlePlayer(overlay)
+    player.load_srt(srt_path)
+    player.start()
+
     return app.exec_()
 
 
@@ -133,6 +154,10 @@ def main():
     parser.add_argument(
         "--srt", type=str, default=None,
         help="Path to an SRT file to play on the overlay"
+    )
+    parser.add_argument(
+        "--file", type=str, default=None,
+        help="Path to a video file (skips player detection, fetches subtitles automatically)"
     )
     parser.add_argument(
         "--offset", type=int, default=0,
@@ -153,9 +178,15 @@ def main():
             print(f"[ERROR] SRT file not found: {args.srt}")
             sys.exit(1)
         sys.exit(run_srt_mode(app, overlay, args.srt, args.offset))
+    elif args.file:
+        if not os.path.exists(args.file):
+            print(f"[ERROR] Video file not found: {args.file}")
+            sys.exit(1)
+        sys.exit(run_auto_mode(app, overlay, video_file_override=args.file))
     else:
         sys.exit(run_auto_mode(app, overlay))
 
 
 if __name__ == "__main__":
     main()
+
