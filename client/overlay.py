@@ -6,9 +6,80 @@ synced subtitles over any video player.
 """
 
 import sys
-from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout
-from PyQt5.QtCore import Qt, QTimer, QPoint
+from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QComboBox
+from PyQt5.QtCore import Qt, QTimer, QPoint, pyqtSignal
 from PyQt5.QtGui import QFont, QColor, QPainter, QPainterPath, QFontMetrics
+
+
+class OverlayControls(QWidget):
+    """
+    A small floating settings widget that sits in the top right.
+    Allows changing languages directly on top of the movie.
+    """
+    translation_requested = pyqtSignal(str)
+    
+    def __init__(self, overlay):
+        super().__init__()
+        self.overlay = overlay
+
+        self.setWindowTitle("Language Controls")
+        self.setWindowFlags(
+            Qt.FramelessWindowHint
+            | Qt.WindowStaysOnTopHint
+            | Qt.Tool
+        )
+        self.setAttribute(Qt.WA_TranslucentBackground)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 5, 10, 5)
+
+        self.combo = QComboBox()
+        self.combo.setCursor(Qt.PointingHandCursor)
+        self.combo.setStyleSheet("""
+            QComboBox {
+                background-color: rgba(15, 15, 20, 220);
+                color: #F3F4F6;
+                border: 1px solid rgba(139, 92, 246, 0.5); /* Accent purple */
+                border-radius: 6px;
+                padding: 6px 12px;
+                font-family: 'Segoe UI', sans-serif;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QComboBox::drop-down { border: none; }
+            QComboBox QAbstractItemView {
+                background-color: rgba(15, 15, 20, 255);
+                color: white;
+                selection-background-color: #8B5CF6;
+            }
+        """)
+        self.combo.currentTextChanged.connect(self._on_combo_changed)
+        layout.addWidget(self.combo)
+
+        # Populate with all supported languages
+        self.ALL_LANGUAGES = [
+            "Original (no translation)",
+            "English", "Yoruba", "French", "Spanish", 
+            "Arabic", "Japanese", "Chinese (Simplified)", 
+            "Portuguese", "German", "Hindi"
+        ]
+        self.combo.addItems(self.ALL_LANGUAGES)
+
+        # Position top right
+        screen = QApplication.primaryScreen().geometry()
+        self.resize(180, 40)
+        self.move(screen.width() - 200, 40)
+
+    def _on_combo_changed(self, target):
+        if not target or not self.overlay.player:
+            return
+            
+        if target in self.overlay.player.subtitles_cache:
+            # Already translated and cached! Instant switch.
+            self.overlay.player.active_language = target
+        else:
+            # Brand new language requested! Tell the main app to start streaming.
+            self.translation_requested.emit(target)
 
 
 class SubtitleOverlay(QWidget):
@@ -43,12 +114,21 @@ class SubtitleOverlay(QWidget):
 
         # Subtitle state
         self.current_text = ""
-        self.font_size = 20
+        self.font_size = 14
         self.font_family = "Segoe UI"
-        self.text_color = QColor(255, 255, 255)       # white
-        self.outline_color = QColor(0, 0, 0)           # black outline
-        self.outline_width = 3
-        self.bg_opacity = 60  # 0-255, semi-transparent background
+        self.text_color = QColor(255, 255, 255)
+        self.outline_color = QColor(12, 12, 12)
+        self.outline_width = 2
+        self.bg_opacity = 30
+
+        # Speed display (shown briefly when speed changes)
+        self._speed_display = ""
+        self._speed_timer = QTimer()
+        self._speed_timer.setSingleShot(True)
+        self._speed_timer.timeout.connect(self._clear_speed_display)
+
+        # Reference to the player (set after player is created)
+        self.player = None
 
         # Dragging state
         self._drag_pos = None
@@ -56,16 +136,26 @@ class SubtitleOverlay(QWidget):
     def set_subtitle(self, text):
         """Update the displayed subtitle text."""
         self.current_text = text
-        self.update()  # trigger repaint
+        self.update()
 
     def clear_subtitle(self):
         """Clear the subtitle display."""
         self.current_text = ""
         self.update()
 
+    def show_speed(self, speed):
+        """Briefly flash the current speed on screen."""
+        self._speed_display = f"Speed: {speed:.1f}x"
+        self._speed_timer.start(1500)  # hide after 1.5s
+        self.update()
+
+    def _clear_speed_display(self):
+        self._speed_display = ""
+        self.update()
+
     def paintEvent(self, event):
         """Custom paint: subtitle text with outline for readability."""
-        if not self.current_text:
+        if not self.current_text and not self._speed_display:
             return
 
         painter = QPainter(self)
@@ -79,36 +169,72 @@ class SubtitleOverlay(QWidget):
         font = QFont(self.font_family, self.font_size, QFont.Bold)
         painter.setFont(font)
 
-        # Calculate text position (centered)
-        metrics = QFontMetrics(font)
-        text_rect = metrics.boundingRect(
-            self.rect(), Qt.AlignCenter | Qt.TextWordWrap, self.current_text
-        )
+        # Draw subtitle text
+        if self.current_text:
+            painter.setPen(self.outline_color)
+            for dx in range(-self.outline_width, self.outline_width + 1):
+                for dy in range(-self.outline_width, self.outline_width + 1):
+                    if dx == 0 and dy == 0:
+                        continue
+                    painter.drawText(
+                        self.rect().translated(dx, dy),
+                        Qt.AlignCenter | Qt.TextWordWrap,
+                        self.current_text
+                    )
+            painter.setPen(self.text_color)
+            painter.drawText(
+                self.rect(), Qt.AlignCenter | Qt.TextWordWrap,
+                self.current_text
+            )
 
-        # Draw text outline (draw text in black, offset in 8 directions)
-        painter.setPen(self.outline_color)
-        for dx in range(-self.outline_width, self.outline_width + 1):
-            for dy in range(-self.outline_width, self.outline_width + 1):
-                if dx == 0 and dy == 0:
-                    continue
-                offset_rect = self.rect().translated(dx, dy)
-                painter.drawText(
-                    offset_rect, Qt.AlignCenter | Qt.TextWordWrap,
-                    self.current_text
-                )
-
-        # Draw main text in white
-        painter.setPen(self.text_color)
-        painter.drawText(
-            self.rect(), Qt.AlignCenter | Qt.TextWordWrap,
-            self.current_text
-        )
+        # Draw speed indicator (top-right, smaller font)
+        if self._speed_display:
+            small_font = QFont(self.font_family, 11)
+            painter.setFont(small_font)
+            painter.setPen(QColor(100, 180, 255))  # soft blue
+            painter.drawText(
+                self.rect().adjusted(0, 6, -10, 0),
+                Qt.AlignTop | Qt.AlignRight,
+                self._speed_display
+            )
 
         painter.end()
 
     # =========================================================================
     # Dragging support (right-click to drag, left-click passes through)
+    # Speed hotkeys: ] = speed up 0.1x,  [ = slow down 0.1x
     # =========================================================================
+
+    def keyPressEvent(self, event):
+        """Hotkeys for live speed and sync control."""
+        if self.player is None:
+            return
+        
+        # Speed Controls: [ ]
+        speed = self.player.speed
+        if event.key() == Qt.Key_BracketRight:  # ] = faster
+            speed = min(round(speed + 0.1, 1), 3.0)
+            self.player.set_speed(speed)
+            self.show_speed(speed)
+        elif event.key() == Qt.Key_BracketLeft:  # [ = slower
+            speed = max(round(speed - 0.1, 1), 0.5)
+            self.player.set_speed(speed)
+            self.show_speed(speed)
+            
+        # Nudge Sync (Off-set): Left/Right Arrows
+        # Moves subtitles back or forward by 200ms
+        elif event.key() == Qt.Key_Right:  # Shift forward 0.2s
+            self.player.offset_ms += 200
+            self.show_speed_msg(f"Offset: {self.player.offset_ms}ms")
+        elif event.key() == Qt.Key_Left:   # Shift back 0.2s
+            self.player.offset_ms -= 200
+            self.show_speed_msg(f"Offset: {self.player.offset_ms}ms")
+
+    def show_speed_msg(self, msg):
+        """Show arbitrary message in the speed display area."""
+        self._speed_display = msg
+        self._speed_timer.start(1500)
+        self.update()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.RightButton:
@@ -130,58 +256,118 @@ class SubtitleOverlay(QWidget):
 
 class SubtitlePlayer:
     """
-    Plays back an SRT file in sync, displaying subtitles at the right time.
-    Reads a list of (start_ms, end_ms, text) tuples and shows them on the overlay.
+    Plays back an SRT file in sync using a Master Reference Clock.
+    This prevents 'timer drift' even over extremely long movies.
     """
 
-    def __init__(self, overlay):
+    def __init__(self, overlay, speed=1.0):
+        import time
         self.overlay = overlay
-        self.subtitles = []  # list of (start_ms, end_ms, text)
-        self.offset_ms = 0   # sync offset from the sync engine
-        self.current_index = 0
-        self.elapsed_ms = 0
-
-        # Timer fires every 50ms to check if we need to show/hide subtitles
+        self.subtitles_cache = {}    # dict of language_name -> list of (start_ms, end_ms, text)
+        self.active_language = "Original (no translation)"
+        self.offset_ms = 0   # manual adjustment/sync offset
+        
+        self.speed = speed
+        self.is_playing = False
+        
+        # Internal timing state
+        self.start_clock = 0   # time.perf_counter() when play/resume started
+        self.base_time_ms = 0  # the movie timestamp where we last started/resumed
+        
+        # Timer fires every 30ms for smooth 33fps visual updates
         self.timer = QTimer()
-        self.timer.setInterval(50)
+        self.timer.setInterval(30)
         self.timer.timeout.connect(self._tick)
 
     def load_srt(self, srt_path, offset_ms=0):
         """Load subtitles from an SRT file."""
         import pysrt
-        subs = pysrt.open(srt_path)
-        self.subtitles = [
+        try:
+            subs = pysrt.open(srt_path, encoding='utf-8')
+        except:
+            subs = pysrt.open(srt_path, encoding='latin-1')
+            
+        parsed = [
             (sub.start.ordinal, sub.end.ordinal, sub.text.replace("\n", " "))
             for sub in subs
         ]
+        self.subtitles_cache = {
+            "Original (no translation)": parsed
+        }
+        self.active_language = "Original (no translation)"
         self.offset_ms = offset_ms
-        self.current_index = 0
-        self.elapsed_ms = 0
+        self.base_time_ms = 0
+        self.is_playing = False
 
     def start(self, start_time_ms=0):
-        """Start subtitle playback from a given timestamp."""
-        self.elapsed_ms = start_time_ms
+        """Start or Resume subtitle playback."""
+        import time
+        self.base_time_ms = start_time_ms
+        self.start_clock = time.perf_counter()
+        self.is_playing = True
         self.timer.start()
 
+    def pause(self):
+        """Pause playback and save current position."""
+        if self.is_playing:
+            self.base_time_ms = self.get_current_movie_time()
+            self.is_playing = False
+            self.timer.stop()
+
     def stop(self):
-        """Stop subtitle playback."""
+        """Stop and reset."""
         self.timer.stop()
+        self.is_playing = False
+        self.base_time_ms = 0
         self.overlay.clear_subtitle()
 
-    def _tick(self):
-        """Check if current time matches any subtitle."""
-        self.elapsed_ms += self.timer.interval()
-        current_time = self.elapsed_ms + self.offset_ms
+    def set_speed(self, speed):
+        """Live speed adjustment (Master clock handles the math)."""
+        # Save progress at current speed before switching
+        if self.is_playing:
+            self.base_time_ms = self.get_current_movie_time()
+            self.start_clock = time.perf_counter()
+        self.speed = speed
 
-        # Find the subtitle that should be displayed now
-        displayed = False
-        for start_ms, end_ms, text in self.subtitles:
-            if start_ms <= current_time <= end_ms:
-                self.overlay.set_subtitle(text)
-                displayed = True
+    def get_current_movie_time(self):
+        """Calculate exact movie timestamp using Master Reference Clock."""
+        if not self.is_playing:
+            return self.base_time_ms
+        
+        import time
+        # elapsed_real_seconds * speed = elapsed_movie_seconds
+        real_diff = time.perf_counter() - self.start_clock
+        movie_diff_ms = int(real_diff * 1000 * self.speed)
+        return self.base_time_ms + movie_diff_ms
+
+    def _find_text(self, current_time, sub_list):
+        """Find the subtitle text for a given millisecond timestamp."""
+        for start_ms, end_ms, text in sub_list:
+            if end_ms < current_time:
+                continue
+            if start_ms > current_time:
                 break
+            return text
+        return ""
 
-        if not displayed:
+    def _tick(self):
+        """Frame update: find and show the correct subtitle for this exact millisecond."""
+        current_time = self.get_current_movie_time() + self.offset_ms
+
+        current_text = ""
+        
+        # 1. Try to find subtitle in the currently active language
+        if self.active_language in self.subtitles_cache:
+            current_text = self._find_text(current_time, self.subtitles_cache[self.active_language])
+            
+        # 2. Fall back to original (English) if no translation streamed yet for this time
+        if not current_text and self.active_language != "Original (no translation)":
+            if "Original (no translation)" in self.subtitles_cache:
+                current_text = self._find_text(current_time, self.subtitles_cache["Original (no translation)"])
+
+        if current_text:
+            self.overlay.set_subtitle(current_text)
+        else:
             self.overlay.clear_subtitle()
 
 

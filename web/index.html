@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kalaye | Perfect Subtitles, Anywhere</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="blob-bg"></div>
+
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="logo">
+                <img src="logo.png" alt="Kalaye Logo" class="logo-img">
+                Kalaye
+            </div>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#how-it-works">How it Works</a>
+                <a href="#download" class="nav-cta">Download</a>
+            </div>
+        </div>
+    </nav>
+
+    <main>
+        <section class="hero">
+            <div class="hero-content">
+                <div class="badge">Version 0.3.0 Available</div>
+                <h1>Perfect Subtitles,<br><span class="gradient-text">Anywhere.</span></h1>
+                <p>Kalaye creates perfectly synchronized, highly accurate subtitles for any movie playing on your
+                    screen. Completely offline. Never search for subtitle files again.</p>
+
+                <div class="hero-actions">
+                    <a href="#download" class="btn btn-primary">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Download for Windows
+                    </a>
+                    <a href="#features" class="btn btn-secondary">Learn More</a>
+                </div>
+            </div>
+
+            <div class="hero-visual">
+                <div class="processing-container glass-panel">
+                    <div class="processing-header">
+                        <span class="pulsing-dot"></span>
+                        <span class="header-text">Live Transcription Engine</span>
+                    </div>
+                    <div class="processing-body">
+                        <!-- Simulated Sine Wave -->
+                        <div class="sine-wrapper">
+                            <svg class="sine-wave" viewBox="0 0 800 100" preserveAspectRatio="none">
+                                <path d="M0,50 Q100,0 200,50 T400,50 T600,50 T800,50" class="wave-line wave-back">
+                                </path>
+                                <path d="M0,50 Q100,100 200,50 T400,50 T600,50 T800,50" class="wave-line wave-front">
+                                </path>
+                            </svg>
+                            <div class="wave-scanner"></div>
+                        </div>
+
+                        <div class="conversion-arrow">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M12 5v14M19 12l-7 7-7-7" />
+                            </svg>
+                        </div>
+
+                        <!-- Typing Output -->
+                        <div class="output-console">
+                            <div class="lang-tag" id="dynamic-lang-tag">Yoruba Translated (.srt)</div>
+                            <div class="typewriter-text" id="dynamic-typewriter">
+                                <!-- Replaced by JavaScript loop below -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="features" class="features-section">
+            <div class="section-header">
+                <h2>Designed for the perfect viewing experience</h2>
+                <p>Everything you need to enjoy foreign films without the hassle of missing or out-of-sync subtitles.
+                </p>
+            </div>
+
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                        </svg>
+                    </div>
+                    <h3>Cloud-Accelerated</h3>
+                    <p>Kalaye pairs a lightweight desktop client with massive Serverless GPUs in the cloud to process hours of audio in seconds.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <polyline points="12 6 12 12 16 14" />
+                        </svg>
+                    </div>
+                    <h3>Flawless Auto-Sync</h3>
+                    <p>Timestamps are generated directly from the actual audio playing. Say goodbye to out-of-sync text
+                        forever.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M5 8l6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18h6" />
+                        </svg>
+                    </div>
+                    <h3>Any Language</h3>
+                    <p>Subtitles are generated seamlessly, whether you're watching a French indie film or a Korean
+                        drama.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- HOW IT WORKS SECTION -->
+        <section id="how-it-works" class="how-it-works-section glass-panel">
+            <div class="section-header">
+                <h2>How Kalaye Works</h2>
+                <p>Translating entire movies seamlessly has never been this simple.</p>
+            </div>
+            <div class="steps-grid">
+                <div class="step-card">
+                    <div class="step-number">
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    </div>
+                    <div class="step-content">
+                        <h3>Press Play</h3>
+                        <p>Open your favorite local media player. No plugins required.</p>
+                    </div>
+                </div>
+                <div class="step-card">
+                    <div class="step-number">
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+                    </div>
+                    <div class="step-content">
+                        <h3>Kalaye Listens</h3>
+                        <p>Our desktop engine securely intercepts the system audio directly. No files are uploaded.</p>
+                    </div>
+                </div>
+                <div class="step-card">
+                    <div class="step-number">
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 8l6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18h6"/></svg>
+                    </div>
+                    <div class="step-content">
+                        <h3>Instant Translation</h3>
+                        <p>Perfectly timed, culturally accurate subtitles appear natively floating over your screen
+                            within milliseconds.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TECH STACK SECTION -->
+        <section id="tech-stack" class="tech-stack-section">
+            <div class="section-header">
+                <h2>Powered by Next-Gen AI</h2>
+                <p>Kalaye orchestrates multiple State-of-the-Art models simultaneously.</p>
+            </div>
+            <div class="tech-grid">
+                <div class="tech-badge glass-panel">
+                    <span class="pulse-indicator blue"></span>
+                    <div class="tech-info">
+                        <h4>Faster-Whisper (Large-V3)</h4>
+                        <p>Sub-second multilingual audio transcription</p>
+                    </div>
+                </div>
+                <div class="tech-badge glass-panel">
+                    <span class="pulse-indicator purple"></span>
+                    <div class="tech-info">
+                        <h4>Google Gemini Flash</h4>
+                        <p>Deep cultural slang & context translation</p>
+                    </div>
+                </div>
+                <div class="tech-badge glass-panel">
+                    <span class="pulse-indicator green"></span>
+                    <div class="tech-info">
+                        <h4>YAMNet AudioSet</h4>
+                        <p>Environmental sound detection (SDH support)</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- USE CASES SECTION -->
+        <section id="use-cases" class="use-cases-section">
+            <div class="section-header">
+                <h2>Who is Kalaye For?</h2>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="uc-icon">🎬</div>
+                    <h3>Foreign Film Buffs</h3>
+                    <p>Watch Korean dramas or French cinema without ever hunting for out-of-sync .srt files online
+                        again.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="uc-icon">🌎</div>
+                    <h3>Language Learners</h3>
+                    <p>Compare spoken audio directly against your native language in real-time to master real-world
+                        pronunciations.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="uc-icon">🦻</div>
+                    <h3>Total Accessibility</h3>
+                    <p>Fully automated Subtitles for the Deaf (SDH) that natively identify gunshots, knocks, and music.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- FAQ SECTION -->
+        <section id="faq" class="faq-section">
+            <div class="section-header">
+                <h2>Frequently Asked Questions</h2>
+            </div>
+            <div class="faq-container">
+                <div class="faq-item glass-panel">
+                    <button class="faq-question">What media players does Kalaye support? <span
+                            class="faq-icon">+</span></button>
+                    <div class="faq-answer">
+                        <div class="faq-answer-content">
+                            <p>Kalaye works flawlessly with downloaded local media files (like Pirates Bay, Telegram, or MP4 files) via players like VLC. We are currently actively evaluating proper compliance solutions for DRM-protected streaming platforms like Netflix.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="faq-item glass-panel">
+                    <button class="faq-question">Do I need a fast internet connection? <span
+                            class="faq-icon">+</span></button>
+                    <div class="faq-answer">
+                        <div class="faq-answer-content">
+                            <p>Phase 1 runs purely offline using your system CPU/GPU. In Phase 3, small audio chunks are
+                                processed on massive Cloud GPUs, requiring only minimal standard internet speed.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="faq-item glass-panel">
+                    <button class="faq-question">Is Kalaye completely free? <span class="faq-icon">+</span></button>
+                    <div class="faq-answer">
+                        <div class="faq-answer-content">
+                            <p>Yes. The desktop application open-source and free to run on your local hardware.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- FINAL CTA SECTION -->
+        <section id="download" class="final-cta-section glass-panel">
+            <div class="cta-content">
+                <h2>Ready to stop searching for subtitles?</h2>
+                <p>Join the future of global media consumption.</p>
+                <div class="hero-actions" style="justify-content: center; margin-top: 2rem;">
+                    <a href="#download" class="btn btn-primary">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Download for Windows
+                    </a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <div class="logo">
+                <img src="logo.png" alt="Kalaye Logo" class="logo-img">
+                Kalaye
+            </div>
+            <p>&copy; 2026 Kalaye. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        // --- 1. LANGUAGE CYCLING LOGIC ---
+        const translations = [
+            { lang: "Yoruba", text: "Gba iyẹ lati fò, oh, Mo wà láàyè!" },
+            { lang: "French", text: "Prends des ailes pour voler, oh, je suis vivant!" },
+            { lang: "Chinese", text: "获得翅膀飞翔，哦，我活着！" },
+            { lang: "Arabic", text: "خذ أجنحة لتطير، أوه، أنا حي!" }
+        ];
+
+        let currentIndex = 0;
+        const tagEl = document.getElementById("dynamic-lang-tag");
+        const containerEl = document.getElementById("dynamic-typewriter");
+
+        function updateTranslation() {
+            const { lang, text } = translations[currentIndex];
+            tagEl.textContent = `${lang} Translated (.srt)`;
+
+            // Clear current words
+            containerEl.innerHTML = '';
+
+            // Split out words and animate them progressively
+            const words = text.split(" ");
+            words.forEach((word, index) => {
+                const span = document.createElement("span");
+                span.className = "word";
+                // Stagger the animation timing to simulate real "typing/speech" mapping
+                span.style.animationDelay = `${0.3 + (index * 0.2)}s`;
+                span.textContent = word + " ";
+                containerEl.appendChild(span);
+            });
+
+            const cursor = document.createElement("span");
+            cursor.className = "cursor";
+            cursor.textContent = "_";
+            containerEl.appendChild(cursor);
+
+            // Move to next language for next loop
+            currentIndex = (currentIndex + 1) % translations.length;
+        }
+
+        // Run immediately, then repeat every 4.5 seconds
+        updateTranslation();
+        setInterval(updateTranslation, 4500);
+        // --- 3. FAQ ACCORDION LOGIC ---
+        const faqQuestions = document.querySelectorAll(".faq-question");
+        faqQuestions.forEach(btn => {
+            btn.addEventListener("click", () => {
+                const answer = btn.nextElementSibling;
+                const icon = btn.querySelector(".faq-icon");
+                const isOpen = answer.style.maxHeight;
+
+                // Close all other answers
+                document.querySelectorAll(".faq-answer").forEach(item => item.style.maxHeight = null);
+                document.querySelectorAll(".faq-icon").forEach(item => item.textContent = "+");
+                document.querySelectorAll(".faq-question").forEach(item => item.style.borderBottom = "none");
+
+                // Open if it wasn't already open
+                if (!isOpen) {
+                    answer.style.maxHeight = answer.scrollHeight + "px";
+                    icon.textContent = "−";
+                    btn.style.borderBottom = "1px solid var(--border-glass)";
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

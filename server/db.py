@@ -38,13 +38,15 @@ def init_db():
         CREATE TABLE IF NOT EXISTS subtitles (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             movie_id INTEGER NOT NULL,
-            language TEXT DEFAULT 'en',
-            source TEXT DEFAULT 'opensubtitles',
+            language TEXT NOT NULL DEFAULT 'und',
+            source TEXT DEFAULT 'whisper',
+            is_original INTEGER DEFAULT 1,        -- 1 = Whisper transcribed, 0 = LLM translated
+            translated_from TEXT DEFAULT NULL,     -- e.g. 'ko' if this was translated from Korean
             srt_content TEXT NOT NULL,
             download_count INTEGER DEFAULT 0,
-            fps TEXT,
             created_at TEXT DEFAULT (datetime('now')),
-            FOREIGN KEY (movie_id) REFERENCES movies(id)
+            FOREIGN KEY (movie_id) REFERENCES movies(id),
+            UNIQUE(movie_id, language)             -- one subtitle per language per movie
         );
 
         CREATE TABLE IF NOT EXISTS sync_results (
@@ -60,8 +62,20 @@ def init_db():
 
         CREATE INDEX IF NOT EXISTS idx_movies_hash ON movies(filename_hash);
         CREATE INDEX IF NOT EXISTS idx_subtitles_movie ON subtitles(movie_id);
+        CREATE INDEX IF NOT EXISTS idx_subtitles_lang ON subtitles(movie_id, language);
         CREATE INDEX IF NOT EXISTS idx_sync_movie ON sync_results(movie_id);
     """)
+
+    # Migrate existing DBs — add new columns if they don't exist yet
+    for col, definition in [
+        ("is_original", "INTEGER DEFAULT 1"),
+        ("translated_from", "TEXT DEFAULT NULL"),
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE subtitles ADD COLUMN {col} {definition}")
+        except Exception:
+            pass  # column already exists
+
 
     conn.commit()
     conn.close()
@@ -98,13 +112,20 @@ def create_movie(title, year=None, filename_hash=None, acr_id=None):
 # Subtitle operations
 # =============================================================================
 
-def save_subtitle(movie_id, srt_content, language="en", source="opensubtitles", download_count=0, fps=None):
-    """Save an SRT subtitle for a movie."""
+def save_subtitle(movie_id, srt_content, language="und", source="whisper",
+                  is_original=1, translated_from=None, download_count=0):
+    """Save a subtitle for a movie. Upserts on (movie_id, language)."""
     conn = get_connection()
     cursor = conn.execute(
-        """INSERT INTO subtitles (movie_id, language, source, srt_content, download_count, fps)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (movie_id, language, source, srt_content, download_count, fps)
+        """INSERT INTO subtitles
+               (movie_id, language, source, is_original, translated_from, srt_content, download_count)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(movie_id, language) DO UPDATE SET
+               srt_content=excluded.srt_content,
+               source=excluded.source,
+               is_original=excluded.is_original,
+               translated_from=excluded.translated_from""",
+        (movie_id, language, source, is_original, translated_from, srt_content, download_count)
     )
     sub_id = cursor.lastrowid
     conn.commit()
@@ -112,14 +133,43 @@ def save_subtitle(movie_id, srt_content, language="en", source="opensubtitles", 
     return sub_id
 
 
-def get_subtitles_for_movie(movie_id, language="en"):
-    """Get all subtitles for a movie, ordered by download count."""
+def get_subtitles_for_movie(movie_id, language=None):
+    """Get subtitles for a movie.
+    - language specified: return only that language
+    - language=None: return the best available (whatever Whisper detected)
+    """
+    conn = get_connection()
+    if language:
+        rows = conn.execute(
+            """SELECT * FROM subtitles
+               WHERE movie_id = ? AND language = ?
+               ORDER BY download_count DESC""",
+            (movie_id, language)
+        ).fetchall()
+    else:
+        # Return best single subtitle in any language (Whisper auto-detected)
+        rows = conn.execute(
+            """SELECT * FROM subtitles
+               WHERE movie_id = ?
+               ORDER BY download_count DESC
+               LIMIT 1""",
+            (movie_id,)
+        ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def find_movies_by_title(title, limit=5):
+    """Find movies with similar titles — used for fingerprint-based disambiguation.
+    Returns up to `limit` candidates ordered by creation date.
+    """
     conn = get_connection()
     rows = conn.execute(
-        """SELECT * FROM subtitles
-           WHERE movie_id = ? AND language = ?
-           ORDER BY download_count DESC""",
-        (movie_id, language)
+        """SELECT * FROM movies
+           WHERE LOWER(title) LIKE LOWER(?)
+           ORDER BY created_at DESC
+           LIMIT ?""",
+        (f"%{title}%", limit)
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]

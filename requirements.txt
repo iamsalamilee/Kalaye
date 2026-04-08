@@ -3,3 +3,9 @@ numpy
 scipy
 pysrt
 ffmpeg-python
+google-generativeai
+python-dotenv
+psutil
+PyQt5
+modal
+pyinstaller
