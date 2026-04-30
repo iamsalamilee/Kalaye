@@ -96,7 +96,7 @@ def get_vad_params_for_language(language: str) -> dict:
     """
     if language and language.lower() in SOFT_SPEECH_LANGUAGES:
         return {
-            "threshold": 0.2,                  # lower energy gate for soft phonemes
+            "threshold": 0.1,                  # lower energy gate for soft phonemes
             "min_silence_duration_ms": 200,     # aggressive split for granular segments
             "speech_pad_ms": 300,               # moderate padding keeps word boundaries intact
         }
@@ -213,7 +213,7 @@ def split_long_segments(segments: list, max_duration: float = 7.0) -> list:
 # ============================================================================
 
 @app.cls(
-    gpu="T4",                         # $0.59/hr — cheapest GPU, turbo only needs ~800MB VRAM
+    gpu="A10",                        # $1.10/hr — faster than T4, plenty of VRAM for large-v3-turbo
     image=whisper_image,
     timeout=1800,                     # 30 min max — full movie in one shot
     scaledown_window=30,              # 30s warmth — don't pay for idle containers
@@ -227,7 +227,7 @@ class WhisperTranscriber:
         self.model = WhisperModel(
             "large-v3-turbo",            # distilled large-v3: 8x faster, same languages
             device="cuda",
-            compute_type="int8",         # fastest on T4, minimal quality loss
+            compute_type="float16",         # fastest on T4, minimal quality loss
         )
         print("[Whisper] large-v3-turbo loaded on GPU -- container is warm")
 
@@ -380,12 +380,12 @@ class WhisperTranscriber:
 # Labels to ignore -- too generic or overlap with the speech pipeline
 IGNORED_LABELS = {
     "speech", "narration, monologue", "conversation",
-    "silence", "white noise", "pink noise", "static",
+    "silence", "white noise", "pink noise",
     "inside, small room", "inside, large room or hall",
-    "music", "background music", "soundtrack",
+    "background music", "soundtrack",
     "crowd", "chatter", "hubbub, speech noise, speech babble",
     "noise", "environmental noise", "outside, urban or manmade",
-    "outside, rural or natural", "vehicle",
+    "outside, rural or natural",
 }
 
 # Music-related labels that get ♪ ♪ formatting instead of [Label]

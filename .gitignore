@@ -44,3 +44,9 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# One-time debug/scratch scripts (already served their purpose)
+fix_logo.py
+get_color.py
+get_logo_color.py
+python

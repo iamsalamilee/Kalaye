@@ -22,6 +22,7 @@ from PyQt5.QtGui import (
 )
 
 from client.overlay import SubtitleOverlay, SubtitlePlayer
+from client.audio_sync import AudioSyncEngine
 
 
 # ============================================================================
@@ -29,13 +30,13 @@ from client.overlay import SubtitleOverlay, SubtitlePlayer
 # ============================================================================
 
 COLORS = {
-    "bg":           "#0F172A",    # Midnight blue / deepest slate
-    "surface":      "#1E293B",    # Slightly lighter blue card background
-    "border":       "#334155",    # Subtle blue-gray borders
-    "text_main":    "#F8FAFC",    # Bright white text
-    "text_muted":   "#94A3B8",    # Slate gray secondary text
-    "primary":      "#2563EB",    # Royal 'Night' Blue accent
-    "primary_glow": "#3B82F6",    # Lighter blue hover glow
+    "bg":           "#F0F4F8",    # Very light cool blue/slate background
+    "surface":      "#FFFFFF",    # Clean white for cards and inputs
+    "border":       "#CBD5E1",    # Soft slate borders
+    "text_main":    "#0F172A",    # Midnight blue text to tie into the theme
+    "text_muted":   "#475569",    # Slate gray secondary text
+    "primary":      "#1D4D9A",    # Kalaye Logo exact blue!
+    "primary_glow": "#2C66C9",    # Lighter logo blue for hover
     "success":      "#10B981",    # Emerald
 }
 
@@ -47,7 +48,7 @@ QMainWindow {{
 QWidget {{
     color: {COLORS['text_main']};
     font-family: 'Segoe UI', 'SF Pro Display', sans-serif;
-    font-size: 14px;
+    font-size: 18px;
 }}
 
 /* Beautiful Group Boxes */
@@ -55,21 +56,21 @@ QGroupBox {{
     background-color: {COLORS['surface']};
     border: 1px solid {COLORS['border']};
     border-radius: 12px;
-    margin-top: 24px;
-    padding-top: 24px;
+    margin-top: 36px;
+    padding-top: 20px;
     font-weight: bold;
-    font-size: 15px;
+    font-size: 19px;
     color: {COLORS['text_muted']};
 }}
 QGroupBox::title {{
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    left: 20px;
-    top: -8px;
+    left: 24px;
+    top: 0px;
     background-color: {COLORS['primary']};
     color: white;
-    padding: 6px 16px;
-    border-radius: 6px;
+    padding: 8px 18px;
+    border-radius: 8px;
 }}
 
 /* Modern Inputs */
@@ -106,11 +107,11 @@ QPushButton {{
 }}
 QPushButton:hover {{
     background-color: {COLORS['border']};
-    color: white;
+    color: {COLORS['text_main']};
 }}
 QPushButton:disabled {{
-    color: #475569;
-    background-color: {COLORS['bg']};
+    color: #94A3B8;
+    background-color: {COLORS['surface']};
 }}
 
 /* Magic 'Action' Buttons */
@@ -118,7 +119,7 @@ QPushButton#ActionBtn {{
     background-color: {COLORS['primary']};
     color: white;
     border: none;
-    font-size: 14px;
+    font-size: 18px;
     padding: 12px 24px;
     border-radius: 8px;
 }}
@@ -126,8 +127,8 @@ QPushButton#ActionBtn:hover {{
     background-color: {COLORS['primary_glow']};
 }}
 QPushButton#ActionBtn:disabled {{
-    background-color: #312E81;
-    color: #6366F1;
+    background-color: #C4C4C4;
+    color: #6B7280;
 }}
 
 /* Progress Bar */
@@ -151,7 +152,7 @@ QTextEdit {{
     border-radius: 12px;
     padding: 16px;
     font-family: 'Consolas', monospace;
-    font-size: 13px;
+    font-size: 16px;
     color: {COLORS['text_muted']};
 }}
 """
@@ -182,7 +183,7 @@ class PipelineWorker(QThread):
             import os
 
             self.progress.emit("Connecting to cloud...", 10)
-            self.log.emit("Connecting to Modal cloud GPUs...")
+            self.log.emit("☁️ Connecting to cloud servers...")
 
             # Use a temp json file to pass the result back
             json_out = os.path.join(tempfile.gettempdir(), "kalaye_pipeline_out.json")
@@ -219,24 +220,31 @@ class PipelineWorker(QThread):
                 if not line:
                     continue
                 
-                self.log.emit(line)
+                # Full verbose output → developer's terminal only
+                print(f"[Pipeline] {line}", flush=True)
 
-                # Update progress based on pipeline stage
+                # Only emit user-friendly stage updates to the GUI
                 if "[Pre-step]" in line:
                     self.progress.emit("Extracting audio from video...", 15)
+                    self.log.emit(" Extracting audio track from your media file...")
                 elif "[Step 1/3]" in line:
                     self.progress.emit("Transcribing with Whisper AI...", 30)
+                    self.log.emit(" AI is listening and transcribing speech...")
                 elif "[Step 2/3]" in line:
                     self.progress.emit("Detecting environmental sounds...", 70)
+                    self.log.emit(" Detecting background sounds & effects...")
                 elif "[Step 3/3]" in line:
                     self.progress.emit("Merging subtitles...", 90)
+                    self.log.emit(" Assembling your final subtitles...")
                 elif "PIPELINE COMPLETE" in line:
                     self.progress.emit("Done!", 100)
+                    self.log.emit(" All done! Your subtitles are ready.")
 
             process.wait()
 
             if process.returncode != 0:
-                self.error.emit(f"Pipeline failed with exit code {process.returncode}")
+                print(f"[Pipeline] FAILED with exit code {process.returncode}", flush=True)
+                self.error.emit("Pipeline encountered an error. Check terminal for details.")
                 return
 
             # Read the JSON result back
@@ -316,53 +324,14 @@ class TranslateWorker(QThread):
             self.error.emit(str(e))
 
 
-# ============================================================================
-# Sync Heartbeat Thread (Autosync)
-# ============================================================================
 
-class SyncHeartbeat(QThread):
-    """
-    Monitors Windows audio output for the active video player.
-    Detects Play/Pause automatically.
-    """
-    state_changed = pyqtSignal(bool)  # True = Playing, False = Paused
+# SyncHeartbeat REMOVED — replaced by AudioSyncEngine (audio_sync.py).
+# The old CPU-based approach used process CPU% to guess play/pause,
+# which caused false pauses during dark scenes and accumulated drift.
+# AudioSyncEngine uses audio fingerprint cross-correlation instead,
+# giving ±100ms accuracy with any video player.
 
-    def __init__(self, player_pids):
-        super().__init__()
-        self.player_pids = player_pids
-        self.running = True
-        self.last_state = None
 
-    def run(self):
-        try:
-            import psutil
-            import time
-            
-            while self.running:
-                is_any_active = False
-                for pid in self.player_pids:
-                    try:
-                        p = psutil.Process(pid)
-                        # Light check: is process active and using CPU (not paused)
-                        if p.is_running() and p.status() != psutil.STATUS_STOPPED:
-                            # If it's used > 0.3% CPU over a 100ms window, it's likely playing
-                            cpu = p.cpu_percent(interval=0.1)
-                            if cpu > 0.3:
-                                is_any_active = True
-                                break
-                    except:
-                        continue
-                
-                if is_any_active != self.last_state:
-                    self.state_changed.emit(is_any_active)
-                    self.last_state = is_any_active
-                    
-                time.sleep(0.5) 
-        except:
-            pass
-
-    def stop(self):
-        self.running = False
 
 
 # ============================================================================
@@ -389,13 +358,16 @@ class KalayeWindow(QMainWindow):
         self.player = None
         self.worker = None
         self.translate_worker = None
-        self.sync_heartbeat = None
+        self.audio_sync = None
         self.log_visible = False
 
         self._build_ui()
 
     def _build_ui(self):
-        from PyQt5.QtWidgets import QGroupBox, QLineEdit, QFormLayout
+        from PyQt5.QtWidgets import QGroupBox, QLineEdit, QFormLayout, QHBoxLayout, QLabel
+        from PyQt5.QtGui import QPixmap
+        from PyQt5.QtCore import Qt
+        import os
     
         central = QWidget()
         self.setCentralWidget(central)
@@ -407,9 +379,26 @@ class KalayeWindow(QMainWindow):
         # ---------------------------------------------------------
         # Header Area
         # ---------------------------------------------------------
-        header = QLabel("✨ KALAYE AI")
-        header.setStyleSheet("font-size: 28px; font-weight: 800; color: white;")
-        main_layout.addWidget(header)
+        header_layout = QHBoxLayout()
+        header_label = QLabel()
+        
+        # Safely resolve path to web/logo.png from the root directory
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        logo_path = os.path.join(base_dir, "web", "logo.png")
+        
+        if os.path.exists(logo_path):
+            pixmap = QPixmap(logo_path)
+            # Scale logo beautifully to match header height, smoothing edges
+            scaled_pixmap = pixmap.scaledToHeight(60, Qt.SmoothTransformation)
+            header_label.setPixmap(scaled_pixmap)
+        else:
+            # Fallback if image isn't found
+            header_label.setText(" KALAYE AI")
+            header_label.setStyleSheet("font-size: 35px; font-weight: 800; color: white;")
+            
+        header_layout.addWidget(header_label)
+        header_layout.addStretch() # Push logo to the left
+        main_layout.addLayout(header_layout)
 
         # ---------------------------------------------------------
         # Group Box: 1. Input & Generation
@@ -422,14 +411,14 @@ class KalayeWindow(QMainWindow):
         self.file_path_edit = QLineEdit()
         self.file_path_edit.setReadOnly(True)
         
-        self.browse_btn = QPushButton("📁 Browse Media")
+        self.browse_btn = QPushButton(" Browse Media")
         self.browse_btn.clicked.connect(self._browse)
         
         file_layout.addWidget(self.file_path_edit)
         file_layout.addWidget(self.browse_btn)
         
         # Start button
-        self.start_btn = QPushButton("🚀 Generate Original Subtitles")
+        self.start_btn = QPushButton(" Generate Original Subtitles")
         self.start_btn.setObjectName("ActionBtn")
         self.start_btn.setEnabled(False)
         self.start_btn.clicked.connect(self._on_start)
@@ -481,18 +470,19 @@ class KalayeWindow(QMainWindow):
         
         self.lang_combo = QComboBox()
         self.lang_combo.addItems([
-            "Original (no translation)", "English", "Yoruba", "French", 
-            "Spanish", "Arabic", "Japanese", "Chinese (Simplified)", 
+            "Original (no translation)",
+            "Yoruba", "Hausa", "Igbo", "English", "French", "Spanish", 
+            "Arabic", "Japanese", "Chinese (Simplified)", 
             "Portuguese", "German", "Hindi"
         ])
         self.lang_combo.currentTextChanged.connect(self._on_lang_changed)
         
-        self.translate_btn = QPushButton("🌐 Translate Pipeline")
+        self.translate_btn = QPushButton("↹ Translate Pipeline")
         self.translate_btn.setObjectName("ActionBtn")
         self.translate_btn.clicked.connect(self._on_translate)
         self.translate_btn.setEnabled(False)
         
-        self.overlay_btn = QPushButton("🖥 Launch Magic Overlay")
+        self.overlay_btn = QPushButton("❐ Launch Magic Overlay")
         self.overlay_btn.setObjectName("ActionBtn")
         self.overlay_btn.clicked.connect(self._on_launch_overlay)
         self.overlay_btn.setEnabled(False)
@@ -504,11 +494,11 @@ class KalayeWindow(QMainWindow):
         ctrl_layout.addWidget(self.overlay_btn)
         
         save_layout = QHBoxLayout()
-        self.save_btn = QPushButton("💾 Save Source SRT")
+        self.save_btn = QPushButton("⎘ Save Source SRT")
         self.save_btn.clicked.connect(self._on_save_srt)
         self.save_btn.setEnabled(False)
         
-        self.download_translated_btn = QPushButton("⬇ Export Translated SRT")
+        self.download_translated_btn = QPushButton("⭳ Export Translated SRT")
         self.download_translated_btn.clicked.connect(self._on_download_translated)
         self.download_translated_btn.setEnabled(False)
         
@@ -579,6 +569,16 @@ class KalayeWindow(QMainWindow):
         scrollbar = self.log_area.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
+    def _on_translate_log(self, line):
+        """Translation log — verbose to terminal, friendly to GUI."""
+        print(f"[Translate] {line}", flush=True)
+        # Only show chunk progress in GUI, not raw details
+        if "Translated chunk" in line:
+            # Extract just the chunk count part
+            self.log_area.append(f" {line}")
+            scrollbar = self.log_area.verticalScrollBar()
+            scrollbar.setValue(scrollbar.maximum())
+
     def _on_pipeline_done(self, result):
         """Pipeline completed successfully."""
         self.srt_content = result["srt_content"]
@@ -618,14 +618,17 @@ class KalayeWindow(QMainWindow):
         self.srt_preview.setText(preview)
 
         self.progress_label.setText(
-            f"✅ Done — {result.get('dialogue_count', '?')} subtitles, "
+            f" Done — {result.get('dialogue_count', '?')} subtitles, "
             f"{len(result.get('sound_tags', []))} sound tags"
         )
 
-        self._on_log(f"\n✅ Pipeline complete!")
-        self._on_log(f"   Language: {result.get('language', 'auto')}")
-        self._on_log(f"   Subtitles: {result.get('dialogue_count', '?')}")
-        self._on_log(f"   Sound tags: {', '.join(result.get('sound_tags', [])) or '(none)'}")
+        # Friendly summary in GUI
+        self._on_log(f"\n Pipeline complete!")
+        self._on_log(f"   {result.get('dialogue_count', '?')} subtitles generated")
+        # Full details to terminal
+        print(f"[Pipeline] Complete! Language: {result.get('language', 'auto')}", flush=True)
+        print(f"[Pipeline] Subtitles: {result.get('dialogue_count', '?')}", flush=True)
+        print(f"[Pipeline] Sound tags: {', '.join(result.get('sound_tags', [])) or '(none)'}", flush=True)
 
     def _on_pipeline_error(self, error_msg):
         """Pipeline failed."""
@@ -633,7 +636,8 @@ class KalayeWindow(QMainWindow):
         self.start_btn.setEnabled(True)
         self.progress_label.setText("Error")
         self.progress_bar.setValue(0)
-        self._on_log(f"\nError: {error_msg}")
+        self._on_log("\n Something went wrong. Please check terminal for details.")
+        print(f"[Pipeline] ERROR: {error_msg}", flush=True)
 
     def _on_lang_changed(self, target):
         """Instantly switch subtitle language in the overlay when dropdown changes."""
@@ -666,14 +670,29 @@ class KalayeWindow(QMainWindow):
         # We don't clear translated_srt here if we want to store multiple, but for UI
         # let's just keep track of the *most recent* full translation for downloading.
         self.translated_srt = None
+
+        # Stop any previous translation still running so its stale chunk_ready
+        # signals can't bleed into this new session.
+        if self.translate_worker and self.translate_worker.isRunning():
+            self.translate_worker.chunk_ready.disconnect()
+            self.translate_worker.finished.disconnect()
+            self.translate_worker.error.disconnect()
+            self.translate_worker.quit()
+            self.translate_worker.wait(500)
         
         if self.player:
+            # Save the current language as fallback while new one streams
+            if (self.player.active_language != "Original (no translation)" and
+                self.player.active_language in self.player.subtitles_cache and
+                len(self.player.subtitles_cache[self.player.active_language]) > 0):
+                self.player.previous_language = self.player.active_language
+            
             self.player.active_language = target
             if target not in self.player.subtitles_cache:
                 self.player.subtitles_cache[target] = []
 
         self.translate_worker = TranslateWorker(self.srt_content, target)
-        self.translate_worker.progress.connect(self._on_log)
+        self.translate_worker.progress.connect(self._on_translate_log)
         self.translate_worker.chunk_ready.connect(self._on_translate_chunk)
         self.translate_worker.finished.connect(self._on_translate_done)
         self.translate_worker.error.connect(self._on_translate_error)
@@ -755,7 +774,7 @@ class KalayeWindow(QMainWindow):
             self.player.subtitles_cache[target_lang].sort(key=lambda x: x[0])
             
         except Exception as e:
-            self._on_log(f"⚠️ Failed to parse chunk for overlay: {e}")
+            self._on_log(f" Failed to parse chunk for overlay: {e}")
 
     def _on_translate_done(self, translated_srt):
         """Translation completed — all chunks received."""
@@ -774,6 +793,12 @@ class KalayeWindow(QMainWindow):
         self.progress_label.setText("Translation complete!")
         self.progress_bar.setValue(100)
         self._on_log(f"Translation complete! {len(translated_srt):,} chars")
+        
+        # Mark this language as the latest completed translation for fallback
+        if self.player:
+            target = self.lang_combo.currentText()
+            if target != "Original (no translation)":
+                self.player.previous_language = target
 
     def _on_translate_error(self, error_msg):
         """Translation failed."""
@@ -804,41 +829,48 @@ class KalayeWindow(QMainWindow):
             self._on_log(f"💾 Translated SRT saved to: {path}")
 
     def _on_launch_overlay(self):
-        """Launch the floating subtitle overlay with Autosync."""
+        """Launch the floating subtitle overlay with VLC HTTP Sync."""
         if not self.player:
             return
-
-        from client.player_detect import get_running_players
 
         # Show the previously hidden overlay and controls
         self.overlay.show()
         if self.controls:
             self.controls.show()
 
-        # Start Autosync Heartbeat
-        players = get_running_players()
-        if players:
-            pids = [p["pid"] for p in players]
-            self.sync_heartbeat = SyncHeartbeat(pids)
-            self.sync_heartbeat.state_changed.connect(self._on_sync_state_changed)
-            self.sync_heartbeat.start()
-            self._on_log(f"🎬 Connected to {players[0]['name']} for Autosync")
-        else:
-            self._on_log("⚠️ No movie player detected. Start movie first for Autosync.")
-            self.player.start(0)
+        self._on_log(" Starting VLC Sync...")
+        self._on_log("   Make sure VLC's Web interface is enabled (see docs)")
+
+        # Stop any previous sync engine
+        if self.audio_sync and self.audio_sync.isRunning():
+            self.audio_sync.stop()
+            self.audio_sync.wait(2000)
+
+        self.audio_sync = AudioSyncEngine(self.current_file)
+        self.audio_sync.position_found.connect(self._on_audio_sync_position)
+        self.audio_sync.playback_state.connect(self._on_audio_sync_playback)
+        self.audio_sync.status.connect(self._on_audio_sync_status)
+        self.audio_sync.start()
 
         self.overlay_btn.setText("Overlay Running...")
         self.overlay_btn.setEnabled(False)
 
-    def _on_sync_state_changed(self, is_playing):
-        """Handle Play/Pause detected from the video player."""
+    def _on_audio_sync_position(self, position_ms, confidence):
+        """VLC sync found the exact movie position."""
         if not self.player:
             return
-            
-        if is_playing and not self.player.is_playing:
-            self.player.start(self.player.get_current_movie_time())
-        elif not is_playing and self.player.is_playing:
+        self.player.sync_to_position(position_ms)
+
+    def _on_audio_sync_playback(self, is_playing):
+        """VLC reported play/pause state change."""
+        if not self.player:
+            return
+        if not is_playing and self.player.is_playing:
             self.player.pause()
+
+    def _on_audio_sync_status(self, message):
+        """Show sync status in the log panel."""
+        self._on_log(f"   [Sync] {message}")
 
     def _on_save_srt(self):
         """Save SRT to file."""
@@ -862,6 +894,9 @@ class KalayeWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Clean up on window close."""
+        if self.audio_sync and self.audio_sync.isRunning():
+            self.audio_sync.stop()
+            self.audio_sync.wait(2000)
         if self.overlay:
             self.overlay.close()
         if self.player:

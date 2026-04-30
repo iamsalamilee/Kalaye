@@ -154,7 +154,7 @@ def classify_segment_type(text: str, segment) -> str:
 # ============================================================================
 
 @app.cls(
-    gpu="H100",
+    gpu="A10",
     image=whisper_image,
     timeout=600,                  # 10 min max per call
     scaledown_window=120,         # keep warm for 2 min between requests
@@ -308,7 +308,7 @@ class CloudTranscriber:
         }
 
 
-@app.function(gpu="H100", image=whisper_image, timeout=600)
+@app.function(gpu="A10", image=whisper_image, timeout=600)
 def _cloud_detect_language(audio_bytes: bytes):
     """Runs on cloud GPU. Detects audio language via Whisper's language ID.
 

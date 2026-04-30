@@ -6,6 +6,8 @@ synced subtitles over any video player.
 """
 
 import sys
+import time
+import bisect
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QComboBox
 from PyQt5.QtCore import Qt, QTimer, QPoint, pyqtSignal
 from PyQt5.QtGui import QFont, QColor, QPainter, QPainterPath, QFontMetrics
@@ -13,33 +15,52 @@ from PyQt5.QtGui import QFont, QColor, QPainter, QPainterPath, QFontMetrics
 
 class OverlayControls(QWidget):
     """
-    A small floating settings widget that sits in the top right.
-    Allows changing languages directly on top of the movie.
+    A small ⚙️ gear button + language dropdown that lives ON the overlay.
+    It's a child widget of the overlay, so it moves with it automatically.
     """
     translation_requested = pyqtSignal(str)
     
     def __init__(self, overlay):
-        super().__init__()
+        super().__init__(overlay)  # Parent is the overlay — moves with it!
         self.overlay = overlay
+        self._expanded = False
 
-        self.setWindowTitle("Language Controls")
-        self.setWindowFlags(
-            Qt.FramelessWindowHint
-            | Qt.WindowStaysOnTopHint
-            | Qt.Tool
-        )
-        self.setAttribute(Qt.WA_TranslucentBackground)
+        # Supported languages
+        self.ALL_LANGUAGES = [
+            "Original (no translation)", 
+            "Yoruba", "Hausa", "Igbo", "English", "French", 
+            "Spanish", "Arabic", "Japanese", "Chinese (Simplified)", 
+            "Portuguese", "German", "Hindi"
+        ]
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 5, 10, 5)
+        # --- Gear Button ---
+        from PyQt5.QtWidgets import QPushButton
+        self.gear_btn = QPushButton("⚙️", self)
+        self.gear_btn.setFixedSize(36, 36)
+        self.gear_btn.setCursor(Qt.PointingHandCursor)
+        self.gear_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(15, 15, 20, 180);
+                color: white;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 18px;
+                font-size: 16px;
+            }
+            QPushButton:hover {
+                background-color: rgba(40, 40, 50, 220);
+                border: 1px solid rgba(255, 255, 255, 0.4);
+            }
+        """)
+        self.gear_btn.clicked.connect(self._toggle_panel)
 
-        self.combo = QComboBox()
+        # --- Language Combo (hidden by default) ---
+        self.combo = QComboBox(self)
         self.combo.setCursor(Qt.PointingHandCursor)
         self.combo.setStyleSheet("""
             QComboBox {
-                background-color: rgba(15, 15, 20, 220);
+                background-color: rgba(15, 15, 20, 230);
                 color: #F3F4F6;
-                border: 1px solid rgba(139, 92, 246, 0.5); /* Accent purple */
+                border: 1px solid rgba(255, 255, 255, 0.25);
                 border-radius: 6px;
                 padding: 6px 12px;
                 font-family: 'Segoe UI', sans-serif;
@@ -50,35 +71,51 @@ class OverlayControls(QWidget):
             QComboBox QAbstractItemView {
                 background-color: rgba(15, 15, 20, 255);
                 color: white;
-                selection-background-color: #8B5CF6;
+                selection-background-color: #1D4D9A;
             }
         """)
-        self.combo.currentTextChanged.connect(self._on_combo_changed)
-        layout.addWidget(self.combo)
-
-        # Populate with all supported languages
-        self.ALL_LANGUAGES = [
-            "Original (no translation)",
-            "English", "Yoruba", "French", "Spanish", 
-            "Arabic", "Japanese", "Chinese (Simplified)", 
-            "Portuguese", "German", "Hindi"
-        ]
         self.combo.addItems(self.ALL_LANGUAGES)
+        self.combo.currentTextChanged.connect(self._on_combo_changed)
+        self.combo.setFixedWidth(180)
+        self.combo.hide()  # Hidden until gear is clicked
 
-        # Position top right
-        screen = QApplication.primaryScreen().geometry()
-        self.resize(180, 40)
-        self.move(screen.width() - 200, 40)
+        # Layout: position at top-right of overlay
+        self._reposition()
+        self.show()
+
+    def _reposition(self):
+        """Position the controls at the top-right corner of the overlay."""
+        parent_w = self.overlay.width()
+        # Gear button at top-right
+        self.gear_btn.move(parent_w - 46, 4)
+        # Combo next to gear (to the left)
+        self.combo.move(parent_w - 46 - 185, 6)
+
+    def _toggle_panel(self):
+        """Toggle showing/hiding the language dropdown."""
+        self._expanded = not self._expanded
+        if self._expanded:
+            self.combo.show()
+        else:
+            self.combo.hide()
+
+    def resizeEvent(self, event):
+        """Reposition when overlay resizes."""
+        self._reposition()
+        super().resizeEvent(event)
 
     def _on_combo_changed(self, target):
         if not target or not self.overlay.player:
             return
-            
-        if target in self.overlay.player.subtitles_cache:
+
+        cache = self.overlay.player.subtitles_cache
+        # Only treat as cached when the list is non-empty.
+        # An empty list means translation is still in progress.
+        if target in cache and len(cache[target]) > 0:
             # Already translated and cached! Instant switch.
             self.overlay.player.active_language = target
         else:
-            # Brand new language requested! Tell the main app to start streaming.
+            # Brand new language (or still streaming) — request full translation.
             self.translation_requested.emit(target)
 
 
@@ -102,7 +139,9 @@ class SubtitleOverlay(QWidget):
             | Qt.Tool  # hides from taskbar
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        # NOTE: We do NOT set WA_TransparentForMouseEvents globally
+        # because child widgets (gear button, combo) need to be clickable.
+        # Left-click pass-through is handled in mousePressEvent instead.
 
         # Position: bottom center of screen
         screen = QApplication.primaryScreen().geometry()
@@ -115,7 +154,9 @@ class SubtitleOverlay(QWidget):
         # Subtitle state
         self.current_text = ""
         self.font_size = 14
-        self.font_family = "Segoe UI"
+        # Nirmala UI is built into Windows 10/11 and supports Hindi, Arabic, Bengali, etc.
+        self.font_family = "Nirmala UI"
+        self._font_fallbacks = ["Segoe UI", "Arial Unicode MS", "Microsoft YaHei", "sans-serif"]
         self.text_color = QColor(255, 255, 255)
         self.outline_color = QColor(12, 12, 12)
         self.outline_width = 2
@@ -165,8 +206,12 @@ class SubtitleOverlay(QWidget):
         bg_color = QColor(0, 0, 0, self.bg_opacity)
         painter.fillRect(self.rect(), bg_color)
 
-        # Font setup
+        # Font setup — use fallback chain for multilingual support
         font = QFont(self.font_family, self.font_size, QFont.Bold)
+        try:
+            font.setFamilies([self.font_family] + self._font_fallbacks)
+        except AttributeError:
+            pass  # setFamilies not available in older PyQt5 — primary font still set
         painter.setFont(font)
 
         # Draw subtitle text
@@ -238,7 +283,6 @@ class SubtitleOverlay(QWidget):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.RightButton:
-            self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
             self._drag_pos = event.globalPos() - self.frameGeometry().topLeft()
             event.accept()
 
@@ -250,7 +294,6 @@ class SubtitleOverlay(QWidget):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.RightButton:
             self._drag_pos = None
-            self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
             event.accept()
 
 
@@ -265,6 +308,7 @@ class SubtitlePlayer:
         self.overlay = overlay
         self.subtitles_cache = {}    # dict of language_name -> list of (start_ms, end_ms, text)
         self.active_language = "Original (no translation)"
+        self.previous_language = None  # last fully-loaded language for smart fallback
         self.offset_ms = 0   # manual adjustment/sync offset
         
         self.speed = speed
@@ -284,13 +328,20 @@ class SubtitlePlayer:
         import pysrt
         try:
             subs = pysrt.open(srt_path, encoding='utf-8')
-        except:
+        except UnicodeDecodeError:
             subs = pysrt.open(srt_path, encoding='latin-1')
+        except Exception as e:
+            print(f"[Overlay] Error loading SRT: {e}")
+            subs = []
             
         parsed = [
             (sub.start.ordinal, sub.end.ordinal, sub.text.replace("\n", " "))
             for sub in subs
         ]
+        print(f"[Overlay] Loaded {len(parsed)} subtitle entries from SRT")
+        if parsed:
+            print(f"[Overlay] First entry: {parsed[0][2][:60]}...")
+        
         self.subtitles_cache = {
             "Original (no translation)": parsed
         }
@@ -321,12 +372,34 @@ class SubtitlePlayer:
         self.base_time_ms = 0
         self.overlay.clear_subtitle()
 
+    def sync_to_position(self, position_ms):
+        """Hard-sync the clock to a detected movie position.
+
+        Called by AudioSyncEngine when it finds the exact playback position
+        via audio fingerprint cross-correlation. This corrects any drift.
+        """
+        import time
+        drift = abs(position_ms - self.get_current_movie_time())
+
+        self.base_time_ms = position_ms
+        self.start_clock = time.perf_counter()
+
+        # Auto-start if not already playing
+        if not self.is_playing:
+            self.is_playing = True
+            self.timer.start()
+
+        # Only log if the correction was noticeable (>200ms)
+        if drift > 200:
+            print(f"[Overlay] Clock corrected by {drift:.0f}ms → "
+                  f"now at {position_ms / 1000:.1f}s")
+
     def set_speed(self, speed):
         """Live speed adjustment (Master clock handles the math)."""
         # Save progress at current speed before switching
         if self.is_playing:
             self.base_time_ms = self.get_current_movie_time()
-            self.start_clock = time.perf_counter()
+            self.start_clock = time.perf_counter()  # 'time' imported at module level
         self.speed = speed
 
     def get_current_movie_time(self):
@@ -341,13 +414,24 @@ class SubtitlePlayer:
         return self.base_time_ms + movie_diff_ms
 
     def _find_text(self, current_time, sub_list):
-        """Find the subtitle text for a given millisecond timestamp."""
-        for start_ms, end_ms, text in sub_list:
-            if end_ms < current_time:
-                continue
-            if start_ms > current_time:
-                break
-            return text
+        """Find the subtitle text for a given millisecond timestamp.
+
+        Uses bisect on end_ms values to skip past expired entries in O(log n)
+        instead of scanning from the beginning every 30 ms tick.
+        """
+        if not sub_list:
+            return ""
+
+        # Build an end_ms list for bisect (sub_list is always sorted by start_ms,
+        # and since subtitles don't overlap, end_ms is also monotonically increasing).
+        # We search for the first entry whose end_ms >= current_time.
+        end_times = [entry[1] for entry in sub_list]
+        idx = bisect.bisect_left(end_times, current_time)
+
+        if idx < len(sub_list):
+            start_ms, end_ms, text = sub_list[idx]
+            if start_ms <= current_time <= end_ms:
+                return text
         return ""
 
     def _tick(self):
@@ -360,7 +444,13 @@ class SubtitlePlayer:
         if self.active_language in self.subtitles_cache:
             current_text = self._find_text(current_time, self.subtitles_cache[self.active_language])
             
-        # 2. Fall back to original (English) if no translation streamed yet for this time
+        # 2. Fall back to PREVIOUS completed language (e.g. Yoruba while Hausa streams)
+        if not current_text and self.previous_language:
+            if (self.previous_language != self.active_language and 
+                self.previous_language in self.subtitles_cache):
+                current_text = self._find_text(current_time, self.subtitles_cache[self.previous_language])
+
+        # 3. Last resort: fall back to original English
         if not current_text and self.active_language != "Original (no translation)":
             if "Original (no translation)" in self.subtitles_cache:
                 current_text = self._find_text(current_time, self.subtitles_cache["Original (no translation)"])

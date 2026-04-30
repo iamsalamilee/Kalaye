@@ -8,7 +8,7 @@ Detects 500+ sound types (gunshots, doors, music, sirens, rain, etc.)
 for generating SDH (Subtitles for the Deaf/Hard-of-Hearing) tags.
 
 v2 fixes applied:
-  - H100 GPU for faster inference
+  - T4 GPU (AST is lightweight — T4 is sufficient)
   - Model baked into image (no cold-start download)
   - Music-related labels get ♪ ♪ formatting instead of [Label]
   - Every sound event has a "type" field for debugging (Fix 6)
@@ -62,13 +62,13 @@ MUSIC_LABELS = {"music", "singing", "song", "musical instrument"}
 
 
 @app.cls(
-    gpu="H100",
+    gpu="T4",
     image=sound_image,
     timeout=300,
     scaledown_window=120,         # keep warm for 2 min between requests
 )
 class CloudSoundClassifier:
-    """AST sound classifier on H100 GPU with baked-in model."""
+    """AST sound classifier on T4 GPU with baked-in model."""
 
     @modal.enter()
     def load_model(self):
@@ -82,7 +82,7 @@ class CloudSoundClassifier:
             model="MIT/ast-finetuned-audioset-10-10-0.4593",
             device=0,  # GPU
         )
-        print("[SoundClassifier] Model loaded on H100 GPU — container is warm")
+        print("[SoundClassifier] Model loaded on T4 GPU — container is warm")
 
     @modal.method()
     def classify(self, audio_bytes: bytes, top_k: int = 5):
@@ -119,7 +119,7 @@ class CloudSoundClassifier:
 
 
 # Legacy function-based endpoint (kept for backward compat with old callers)
-@app.function(gpu="H100", image=sound_image, timeout=300)
+@app.function(gpu="T4", image=sound_image, timeout=300)
 def _cloud_classify(audio_bytes: bytes, top_k: int = 5):
     """Runs on Modal cloud. Classifies environmental sounds using AST.
 
@@ -166,7 +166,7 @@ def classify_audio(audio_path, top_k=5):
     Returns:
         List of dicts: [{"label": "Gunshot", "score": 0.87, "type": "sound"}, ...]
     """
-    print(f"[SoundDetect] Uploading to cloud H100: {os.path.basename(audio_path)}")
+    print(f"[SoundDetect] Uploading to cloud T4: {os.path.basename(audio_path)}")
 
     with open(audio_path, "rb") as f:
         audio_bytes = f.read()
@@ -177,7 +177,7 @@ def classify_audio(audio_path, top_k=5):
         return []
 
     size_kb = len(audio_bytes) / 1024
-    print(f"[SoundDetect] File size: {size_kb:.0f} KB — classifying on H100 GPU...")
+    print(f"[SoundDetect] File size: {size_kb:.0f} KB — classifying on T4 GPU...")
 
     classifier = CloudSoundClassifier()
     predictions = classifier.classify.remote(audio_bytes, top_k=top_k)
@@ -319,7 +319,7 @@ def main():
         return
 
     size_kb = len(audio_bytes) / 1024
-    print(f"   File size: {size_kb:.0f} KB — sending to Modal H100 GPU...\n")
+    print(f"   File size: {size_kb:.0f} KB — sending to Modal T4 GPU...\n")
 
     classifier = CloudSoundClassifier()
     predictions = classifier.classify.remote(audio_bytes)
