@@ -24,12 +24,14 @@ test_files/
 *.mov
 *.mp3
 *.flac
+*.srt
 
 # Environment variables
 .env
 
 # Database files
 *.db
+*.fpdb
 
 # Whisper model cache
 models/

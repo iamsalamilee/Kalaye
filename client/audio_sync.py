@@ -32,7 +32,7 @@ from PyQt5.QtCore import QThread, pyqtSignal
 POLL_INTERVAL = 0.5      # seconds between VLC polls
 VLC_URL = "http://localhost:8080/requests/status.json"
 VLC_PASSWORD = "kalaye"  # must match VLC's Lua HTTP password
-MAX_CONNECT_RETRIES = 20 # stop spamming after ~10 seconds of no VLC
+MAX_CONNECT_RETRIES = 12 # stop after ~6 seconds of no VLC → triggers Shazam fallback
 
 
 class AudioSyncEngine(QThread):
@@ -137,12 +137,13 @@ class AudioSyncEngine(QThread):
                         )
                     elif retry_count == MAX_CONNECT_RETRIES + 1:
                         self.status.emit(
-                            "VLC HTTP not found -- enable Web interface in VLC Preferences"
+                            "VLC HTTP not found -- switching to audio sync"
                         )
                         print(
-                            "[VLCSync] VLC HTTP not reachable. "
-                            "Enable it: Tools > Preferences > All > Interface > Main interfaces > Web"
+                            "[VLCSync] VLC HTTP not reachable after "
+                            f"{MAX_CONNECT_RETRIES} attempts — triggering fallback"
                         )
+                        self.ready.emit(False)  # trigger Shazam fallback
 
             except requests.Timeout:
                 pass  # VLC is slow to respond, just skip this cycle

@@ -23,6 +23,8 @@ from PyQt5.QtGui import (
 
 from client.overlay import SubtitleOverlay, SubtitlePlayer
 from client.audio_sync import AudioSyncEngine
+from client.realtime_sync import ShazamSyncEngine
+from client.spectrogram_sync import build_db_from_file, load_db
 
 
 # ============================================================================
@@ -359,6 +361,8 @@ class KalayeWindow(QMainWindow):
         self.worker = None
         self.translate_worker = None
         self.audio_sync = None
+        self.shazam_sync = None
+        self.fingerprint_db = None
         self.log_visible = False
 
         self._build_ui()
@@ -829,7 +833,14 @@ class KalayeWindow(QMainWindow):
             self._on_log(f"💾 Translated SRT saved to: {path}")
 
     def _on_launch_overlay(self):
-        """Launch the floating subtitle overlay with VLC HTTP Sync."""
+        """Launch the floating subtitle overlay with smart sync.
+
+        Strategy:
+          1. Try VLC HTTP sync first (exact, millisecond accuracy)
+          2. If VLC doesn't connect within 10 seconds, automatically
+             fall back to Shazam fingerprint sync (universal, works
+             with any player/streaming service)
+        """
         if not self.player:
             return
 
@@ -838,22 +849,84 @@ class KalayeWindow(QMainWindow):
         if self.controls:
             self.controls.show()
 
-        self._on_log(" Starting VLC Sync...")
-        self._on_log("   Make sure VLC's Web interface is enabled (see docs)")
+        # Stop any previous sync engines
+        self._stop_all_sync()
 
-        # Stop any previous sync engine
-        if self.audio_sync and self.audio_sync.isRunning():
-            self.audio_sync.stop()
-            self.audio_sync.wait(2000)
+        self._on_log(" Trying VLC HTTP sync first...")
 
+        # Start VLC HTTP sync
         self.audio_sync = AudioSyncEngine(self.current_file)
         self.audio_sync.position_found.connect(self._on_audio_sync_position)
         self.audio_sync.playback_state.connect(self._on_audio_sync_playback)
         self.audio_sync.status.connect(self._on_audio_sync_status)
+        self.audio_sync.ready.connect(self._on_vlc_ready_or_failed)
         self.audio_sync.start()
+
+        # Build fingerprint DB in background (so it's ready if we need Shazam)
+        if self.current_file and not self.fingerprint_db:
+            self._on_log(" Building audio fingerprint DB (one-time)...")
+            try:
+                fpdb_path = self.current_file + ".fpdb"
+                self.fingerprint_db = build_db_from_file(self.current_file, fpdb_path)
+                self._on_log(f"   Fingerprint DB ready ({len(self.fingerprint_db['hashes'])} hashes)")
+            except Exception as e:
+                self._on_log(f"   ⚠️ Fingerprint DB failed: {e}")
+                self.fingerprint_db = None
 
         self.overlay_btn.setText("Overlay Running...")
         self.overlay_btn.setEnabled(False)
+
+    def _on_vlc_ready_or_failed(self, connected):
+        """Called when VLC HTTP sync either connects or gives up."""
+        if connected:
+            self._on_log(" ✅ VLC HTTP connected — using exact sync")
+            print("[Sync] ✅ VLC HTTP connected — using exact sync")
+            return
+
+        # VLC not available — fall back to Shazam sync
+        self._on_log(" VLC not found — switching to universal audio sync...")
+        print("[Sync] VLC not found — switching to Shazam fingerprint sync...")
+        self._start_shazam_sync()
+
+    def _start_shazam_sync(self):
+        """Start the Shazam fingerprint sync engine."""
+        if not self.fingerprint_db:
+            msg = "⚠️ No fingerprint DB — cannot start audio sync"
+            self._on_log(f"   {msg}")
+            print(f"[Sync] {msg}")
+            return
+
+        # Stop VLC sync if it's still trying
+        if self.audio_sync and self.audio_sync.isRunning():
+            self.audio_sync.stop()
+            self.audio_sync.wait(2000)
+
+        print(f"[Sync] Starting ShazamSyncEngine with {len(self.fingerprint_db['hashes'])} hashes...")
+
+        self.shazam_sync = ShazamSyncEngine(
+            self.fingerprint_db,
+            playback_speed=self.player.speed if self.player else 1.0,
+        )
+        self.shazam_sync.position_found.connect(self._on_audio_sync_position)
+        self.shazam_sync.sync_status.connect(self._on_shazam_status)
+        self.shazam_sync.start()
+
+        self._on_log(" 🎯 Shazam audio sync active — works with any player")
+        print("[Sync] 🎯 Shazam audio sync ACTIVE — listening every 12 seconds")
+
+    def _on_shazam_status(self, message):
+        """Show Shazam sync status in the log panel."""
+        self._on_log(f"   [AudioSync] {message}")
+        print(f"[ShazamSync] {message}")
+
+    def _stop_all_sync(self):
+        """Stop all running sync engines."""
+        if self.audio_sync and self.audio_sync.isRunning():
+            self.audio_sync.stop()
+            self.audio_sync.wait(2000)
+        if self.shazam_sync and self.shazam_sync.isRunning():
+            self.shazam_sync.stop()
+            self.shazam_sync.wait(2000)
 
     def _on_audio_sync_position(self, position_ms, confidence):
         """VLC sync found the exact movie position."""
@@ -894,9 +967,7 @@ class KalayeWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Clean up on window close."""
-        if self.audio_sync and self.audio_sync.isRunning():
-            self.audio_sync.stop()
-            self.audio_sync.wait(2000)
+        self._stop_all_sync()
         if self.overlay:
             self.overlay.close()
         if self.player:
